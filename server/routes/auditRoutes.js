@@ -1,33 +1,44 @@
 const express = require('express');
 const router = express.Router();
-const OpenAI = require('openai');
+const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const Audit = require('../models/Audit');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 router.post('/review', async (req, res) => {
   try {
     const { code, language } = req.body;
 
-    const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring.
-    Provide the response strictly in JSON format with these exact keys:
-    "vulnerabilities" (array of strings),
-    "performanceFixes" (array of strings),
-    "refactoredCode" (string),
-    "summary" (string).
+    const schema = {
+      type: SchemaType.OBJECT,
+      properties: {
+        vulnerabilities: {
+          type: SchemaType.ARRAY,
+          items: { type: SchemaType.STRING },
+        },
+        performanceFixes: {
+          type: SchemaType.ARRAY,
+          items: { type: SchemaType.STRING },
+        },
+        refactoredCode: { type: SchemaType.STRING },
+        summary: { type: SchemaType.STRING },
+      },
+      required: ['vulnerabilities', 'performanceFixes', 'refactoredCode', 'summary'],
+    };
 
-    Code to analyze:
-    ${code}`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
     });
 
-    const aiResult = JSON.parse(completion.choices[0].message.content);
+    const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring:\n\n${code}`;
 
-    // Save review to MongoDB
+    const result = await model.generateContent(prompt);
+    const aiResult = JSON.parse(result.response.text());
+
     const newAudit = await Audit.create({
       originalCode: code,
       language,
@@ -36,9 +47,9 @@ router.post('/review', async (req, res) => {
 
     res.status(201).json(newAudit);
   } catch (error) {
+    console.error('Gemini Audit Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// MUST HAVE THIS EXPORT AT THE BOTTOM
 module.exports = router;
