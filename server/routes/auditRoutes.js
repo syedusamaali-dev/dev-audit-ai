@@ -1,7 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const { GoogleGenAI, Type } = require('@google/genai');
-const Audit = require('../models/Audit'); // Direct import (NO curly braces)
+const Audit = require('../models/Audit');
+
+// Helper function to handle 503 high demand retries
+async function generateWithRetry(ai, params, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (error) {
+      const is503 = error.message && error.message.includes('503');
+      if (is503 && i < retries - 1) {
+        console.warn(`Gemini 503 High Demand - Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise((res) => setTimeout(res, delay));
+        delay *= 2; // Exponential backoff: 1s, 2s, 4s
+      } else {
+        throw error;
+      }
+    }
+  }
+}
 
 router.post('/review', async (req, res) => {
   try {
@@ -20,7 +38,8 @@ router.post('/review', async (req, res) => {
 
     const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring principles:`;
 
-    const response = await ai.models.generateContent({
+    // Call generateContent with automatic retry on 503 spikes
+    const response = await generateWithRetry(ai, {
       model: 'gemini-3.6-flash',
       contents: [prompt, code],
       config: {
