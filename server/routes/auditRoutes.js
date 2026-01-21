@@ -1,47 +1,50 @@
 const express = require('express');
 const router = express.Router();
-const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
+const { GoogleGenAI, Type } = require('@google/genai');
 const Audit = require('../models/Audit');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 router.post('/review', async (req, res) => {
   try {
     const { code, language } = req.body;
 
-    const schema = {
-      type: SchemaType.OBJECT,
-      properties: {
-        vulnerabilities: {
-          type: SchemaType.ARRAY,
-          items: { type: SchemaType.STRING },
-        },
-        performanceFixes: {
-          type: SchemaType.ARRAY,
-          items: { type: SchemaType.STRING },
-        },
-        refactoredCode: { type: SchemaType.STRING },
-        summary: { type: SchemaType.STRING },
-      },
-      required: ['vulnerabilities', 'performanceFixes', 'refactoredCode', 'summary'],
-    };
+    if (!code) {
+      return res.status(400).json({ error: 'Code content is required for auditing.' });
+    }
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: {
+    const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring principles:`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [prompt, code],
+      config: {
         responseMimeType: 'application/json',
-        responseSchema: schema,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            vulnerabilities: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            performanceFixes: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            refactoredCode: { type: Type.STRING },
+            summary: { type: Type.STRING },
+          },
+          required: ['vulnerabilities', 'performanceFixes', 'refactoredCode', 'summary'],
+        },
       },
     });
 
-    const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring:\n\n${code}`;
+    const aiResult = JSON.parse(response.text);
 
-    const result = await model.generateContent(prompt);
-    const aiResult = JSON.parse(result.response.text());
-
+    // Save to MongoDB Atlas
     const newAudit = await Audit.create({
       originalCode: code,
-      language,
+      language: language || 'javascript',
       ...aiResult,
     });
 
