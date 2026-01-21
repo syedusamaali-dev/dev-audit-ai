@@ -1,9 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { GoogleGenAI, Type } = require('@google/genai');
-const Audit = require('../models/Audit');
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const Audit = require('../models/Audit'); // Direct import (NO curly braces)
 
 router.post('/review', async (req, res) => {
   try {
@@ -12,6 +10,13 @@ router.post('/review', async (req, res) => {
     if (!code) {
       return res.status(400).json({ error: 'Code content is required for auditing.' });
     }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY is missing in server environment variables.' });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring principles:`;
 

@@ -1,10 +1,10 @@
+const dotenv = require('dotenv');
+dotenv.config(); // Must be called before importing routes
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const auditRoutes = require('./routes/auditRoutes');
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
