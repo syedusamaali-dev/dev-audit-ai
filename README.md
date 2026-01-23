@@ -28,13 +28,13 @@ An enterprise-grade code auditing platform built with React, Node.js, Express, M
 
 ## Workspace & Split-Screen Dashboard
 
-![Dashboard Workspace](README-assets/dashboard.png)
+![Dashboard Workspace](README-assets/dashboard.PNG)
 
 ---
 
 ## AI Audit & Vulnerability Report
 
-![Audit Report](README-assets/audit-results.png)
+![Audit Report](README-assets/audit-results.PNG)
 
 ---
 
