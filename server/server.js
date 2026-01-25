@@ -1,25 +1,30 @@
-const dotenv = require('dotenv');
-dotenv.config(); // Must be called before importing routes
-
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
+const path = require('path');
+require('dotenv').config();
+
 const auditRoutes = require('./routes/auditRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-app.use(cors({ origin: 'http://localhost:5173' }));
 app.use(express.json());
 
-// MongoDB Atlas Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB Atlas Connected Successfully'))
-  .catch((err) => console.error('MongoDB Connection Error:', err));
-
-// Routes
+// API Routes
 app.use('/api/audit', auditRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Serve static frontend assets from client/dist
+app.use(express.static(path.join(__dirname, '../client/dist')));
+
+// SPA Fallback: Send index.html for any unhandled routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
+
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI;
+
+mongoose.connect(MONGO_URI)
+  .then(() => {
+    console.log('MongoDB Atlas Connected');
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  })
+  .catch((err) => console.error('MongoDB Connection Error:', err));
