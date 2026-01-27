@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { GoogleGenAI, Type } = require('@google/genai');
 const Audit = require('../models/Audit');
+const connectDB = require('../config/db'); // Import connection helper
 
 // Helper function to handle 503 high demand retries
 async function generateWithRetry(ai, params, retries = 3, delay = 1000) {
@@ -13,7 +14,7 @@ async function generateWithRetry(ai, params, retries = 3, delay = 1000) {
       if (is503 && i < retries - 1) {
         console.warn(`Gemini 503 High Demand - Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
         await new Promise((res) => setTimeout(res, delay));
-        delay *= 2; // Exponential backoff: 1s, 2s, 4s
+        delay *= 2;
       } else {
         throw error;
       }
@@ -29,16 +30,18 @@ router.post('/review', async (req, res) => {
       return res.status(400).json({ error: 'Code content is required for auditing.' });
     }
 
+    // 1. Ensure DB Connection is fully established before running queries
+    await connectDB();
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is missing in server environment variables.' });
+      return res.status(500).json({ error: 'GEMINI_API_KEY is missing in environment variables.' });
     }
 
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Analyze the following ${language || 'code'} for security vulnerabilities, performance issues, and clean code refactoring principles:`;
 
-    // Call generateContent with automatic retry on 503 spikes
     const response = await generateWithRetry(ai, {
       model: 'gemini-3.6-flash',
       contents: [prompt, code],
@@ -65,7 +68,7 @@ router.post('/review', async (req, res) => {
 
     const aiResult = JSON.parse(response.text);
 
-    // Save to MongoDB Atlas
+    // 2. Save to MongoDB Atlas
     const newAudit = await Audit.create({
       originalCode: code,
       language: language || 'javascript',
@@ -74,7 +77,7 @@ router.post('/review', async (req, res) => {
 
     res.status(201).json(newAudit);
   } catch (error) {
-    console.error('Gemini Audit Error:', error);
+    console.error('Audit Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
